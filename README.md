@@ -1,2 +1,2 @@
 # first-sample-analysis
-First sample analysis to highlight some quantitative/ coding skills
+First sample repository with excerpts to highlight some of my quantitative/ coding skills
