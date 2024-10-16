@@ -1,13 +1,13 @@
-# 1) Description --------------------------- --------------------------- ---------------------------
-# project: UNHCR: CBP/APP and GBV dashboard (legacy analysis)
-# file: data cleaning II
-# author: BULLA@unhcr.org/ dominik.bulla@gmail.com
-# September 2022 through June 2023
+# Description --------------------------- --------------------------- ---------------------------
+# Project: Analysis of CBP/ APP legacy data (i.e., 2015-2021)
+# Author: Dominik Bulla (dominik.bulla@gmail.com)
+# Date: 2024-10-14
+# Purpose: Clean and prepare dataset for analysis.
 
 
 
-# 2) Environment --------------------------- --------------------------- ---------------------------
-setwd("C:/Users/Dominik/OneDrive - Nexus365/Work/Consulting/UNHCR/CBP APP GBV Data Analysis Dashboard Consultant")
+# Environment --------------------------- --------------------------- ---------------------------
+setwd("C:/Users/domin/GitHub/first-sample-analysis")
 MAR_ORIGINAL <- par("mar")
 par(mar = c(5, 4, 1, 1))
 rm(list = ls())
@@ -15,45 +15,36 @@ options(scipen = 999)
 
 
 
-# 3) Packages --------------------------- --------------------------- ---------------------------
+# Packages --------------------------- --------------------------- ---------------------------
 library(readxl)
-library(dplyr)
+library(tidyverse)
 
 
 
-# 4) Import data --------------------------- --------------------------- ---------------------------
-
-budget <- read.csv("06 Data/01 Legacy Analysis/UNHCR_legacy_budget_20230708.csv")
-
-expenditures <- read.csv("06 Data/01 Legacy Analysis/UNHCR_legacy_expenditures_20230708.csv")
-# expendall <- read.csv("06 Data/01 Legacy Analysis/UNHCR_legacy_expenditures_complete_20230625.csv")
-indicators <- read.csv("06 Data/01 Legacy Analysis/UNHCR_legacy_indicators_20230708.csv")
-staffing <- read.csv("06 Data/01 Legacy Analysis/UNHCR_legacy_staffing_20230708.csv")
-staffing_OL <- read.csv("06 Data/01 Legacy Analysis/UNHCR_legacy_staffing_OL_20230714.csv")
-operations <- read_excel("06 Data/Country list as of 2022 reporting_20230216.xlsx", sheet = "LGBTIQ+")
-operations2 <- read_excel("06 Data/CBPGBV Dashboards_Regions_20230625_V01.xlsx", sheet = "Countries")
-indicator_overview <- read_excel("06 Data/01 Legacy Analysis/CBPGBV_Legacy_Indicator overview_20230628_V01.xlsx", sheet = "Sheet1") %>%
-  select(Indicator, Aggregation)
+# Import data --------------------------- --------------------------- ---------------------------
+budget_data <- read.csv("01 raw data/legacy_budget_20230708.csv")
+expenditure_data <- read.csv("01 raw data/legacy_expenditures_20230708.csv")
+rbm_data <- read.csv("01 raw data/legacy_indicators_20230708.csv")
+staffing_data <- read.csv("01 raw data/legacy_staffing_20230708.csv")
+staffing_OL <- read.csv("01 raw data/legacy_staffing_OL_20230714.csv")
+#country_list <- read_excel("01 raw data/country list as of 2022 reporting_20230216.xlsx", sheet = "list")
+operations <- read_excel("01 raw data/regions_20230720_V01.xlsx", sheet = "Countries")
+indicator_overview <- read_excel("01 raw data/legacy_Indicator overview_20230628_V01.xlsx", sheet = "Sheet1")
 
 
 
-# 5) The data structure --------------------------- --------------------------- ---------------------------
-# comment. As outlined in the deck 'Analysis of the legacy data_20230216', the general structure of the
-# data is as follows: operation > objective > output > indicator
-# level 1) indicator (RBM data only)
-# level 2) output (RBM/ budget/ expenditure)
-# level 3) objective (RBM/ budget/ expenditure)
-# level 4) operation (RBM/ budget/ expenditure/ staffing)
-# thus, we need a long dataset with indicator row wise and OP, OL, expenditure column wise
+# Clean up budget data --------------------------- --------------------------- ---------------------------
 
-# 6) prepare the budget data --------------------------- --------------------------- ---------------------------
-
-budget <- budget %>%
+# reduce budget data down to variables actually needed for analysis  
+budget_data <- budget_data %>%
   select(Operation, Year, PPG, Objective, Output_Name, Budget_Component, Budget_Category, Cost_USD) %>%
   group_by(Operation, Year, Objective, Output_Name, PPG, Budget_Component, Budget_Category) %>%
-  dplyr::summarise(USD = sum(Cost_USD, na.rm = TRUE))
-budget <- as.data.frame(budget)
-budget <- reshape(budget,
+  dplyr::summarise(USD = sum(Cost_USD, na.rm = TRUE)) %>%
+  as.data.frame()
+
+# the budget data is in long format. ie, budget data for an operation is across several rows to cover allocations to
+# admin, partner projects, internal projects, and staff. These budget categories will now be allocated across columns. 
+budget_data <- reshape(budget_data,
   idvar = c(
     "Operation", "Year", "PPG",
     "Objective", "Output_Name", "Budget_Component"
@@ -61,17 +52,19 @@ budget <- reshape(budget,
   timevar = "Budget_Category",
   direction = "wide"
 )
-budget <- as.data.frame(budget) %>%
+
+budget_data <- as.data.frame(budget_data) %>%
   rename(
     Admin = USD.UNHCR_ADMIN,
     Internal_project = USD.UNHCR_PROJECT,
     Staff = USD.UNHCR_STAFF,
     External_project = USD.PARTNER_PROJECT
-  )
-budget <- as.data.frame(budget)
+  ) %>%
+  as.data.frame()
 
-
-budget <- reshape(budget,
+# In terms of budget components, the budget data is still in long format. ie AOL and OL. Keep in mind, OP = AOL + OL
+# These budget components will now be allocated across columns. 
+budget_data <- reshape(budget_data,
   idvar = c(
     "Operation", "Year",
     "Objective", "Output_Name",
@@ -80,7 +73,9 @@ budget <- reshape(budget,
   timevar = "Budget_Component",
   direction = "wide"
 )
-budget <- budget %>%
+
+# Budget data still to granular. The data will therefore be aggregated up to the PPG level.
+budget_data <- budget_data %>%
   group_by(Operation, Year, Objective, Output_Name, PPG) %>%
   dplyr::summarise(
     `Admin.Above Operating Level` = sum(`Admin.Above Operating Level`, na.rm = TRUE),
@@ -93,7 +88,8 @@ budget <- budget %>%
     `External_project.Operating Level` = sum(`External_project.Operating Level`, na.rm = TRUE)
   )
 
-budget <- budget %>%
+# AOL and OL as well as OP (i.e., AOL + OL) data will be summed up across budget categories
+budget_data <- budget_data %>%
   rename(
     Admin_AOL = `Admin.Above Operating Level`,
     Internal_project_AOL = `Internal_project.Above Operating Level`,
@@ -124,12 +120,21 @@ budget <- budget %>%
     Admin_OP, Staff_OP, Internal_project_OP, External_project_OP, Total_OP
   )
 
-expenditures <- expenditures %>%
+
+
+# Clean up expenditure data --------------------------- --------------------------- ---------------------------
+
+# reduce expenditure data down to variables actually needed for analysis  
+expenditure_data <- expenditure_data %>%
   select(Operation, Year, PPG, Objective, Output, Budget_Category, Expenditures) %>%
   group_by(Operation, Year, PPG, Objective, Output, Budget_Category) %>%
-  dplyr::summarise(Expenditures = sum(Expenditures, na.rm = TRUE))
-expenditures <- as.data.frame(expenditures)
-expenditures <- reshape(expenditures,
+  dplyr::summarise(Expenditures = sum(Expenditures, na.rm = TRUE)) %>%
+  as.data.frame()
+
+# the expenditure data is in long format. ie, budget data for an operation is across several rows to cover allocations 
+# to admin, partner projects, internal projects, and staff. These budget categories will now be allocated across 
+# columns. 
+expenditure_data <- reshape(expenditure_data,
   idvar = c(
     "Operation", "Year",
     "PPG",
@@ -138,44 +143,55 @@ expenditures <- reshape(expenditures,
   timevar = "Budget_Category",
   direction = "wide"
 )
-expenditures <- as.data.frame(expenditures) %>%
+expenditure_data <- expenditure_data %>%
   rename(
     Admin_Exp = Expenditures.UNHCR_ADMIN,
     Internal_project_Exp = Expenditures.UNHCR_PROJECT,
     Staff_Exp = Expenditures.UNHCR_STAFF,
     External_project_Exp = Expenditures.PARTNER_PROJECT
   )
-expenditures <- as.data.frame(expenditures)
-expenditures <- expenditures %>%
+
+# Create a total sum of expenditures
+expenditure_data <- expenditure_data %>%
   rowwise() %>%
   mutate(Total_Exp = sum(Admin_Exp, Staff_Exp, Internal_project_Exp, External_project_Exp, na.rm = TRUE)) %>%
   select(
     Operation, Year, PPG, Objective, Output,
     Admin_Exp, Staff_Exp, Internal_project_Exp, External_project_Exp, Total_Exp
   )
-expenditures <- as.data.frame(expenditures)
-budget <- merge(budget, expenditures, by = c("Operation", "Year", "Objective", "Output", "PPG"), all = TRUE)
 
-budget <- budget %>%
+
+
+# Merge budget and expenditure data --------------------------- --------------------------- ---------------------------
+budget_data <- merge(budget_data, expenditure_data, by = c("Operation", "Year", "Objective", "Output", "PPG"), all = TRUE)
+rm(expenditure_data)
+
+budget_data <- budget_data %>%
   arrange(Operation, Year, Objective, Output, PPG)
-rm(expenditures)
 
-budget <- merge(budget, operations, by.x = "Operation", by.y = "Country")
-colnames(budget)[colnames(budget) == "Sub-region"] <- "Sub_region"
-budget <- budget %>%
+# Ensuring that we use official names of countries and operations
+budget_data <- merge(budget_data, operations, by.x = "Operation", by.y = "Alternative spelling")
+budget_data <- budget_data %>%
   select(
-    Region, Sub_region, Operation, Year, PPG,
+    Region, `Sub region`, `Regional bureau`, Country, Type, 
+    Year, PPG, 
     Objective, Output,
     Admin_OL, Staff_OL, Internal_project_OL, External_project_OL, Total_OL,
     Admin_AOL, Staff_AOL, Internal_project_AOL, External_project_AOL, Total_AOL,
     Admin_OP, Staff_OP, Internal_project_OP, External_project_OP, Total_OP,
     Admin_Exp, Staff_Exp, Internal_project_Exp, External_project_Exp, Total_Exp
-  )
-budget <- budget %>%
-  mutate(selected_budget = ifelse(is.na(Total_OL), 0, 1)) %>%
-  mutate(selected_budget = ifelse(Total_OL == 0, 0, selected_budget))
-budget_impact <- budget %>%
-  group_by(Operation, Year, Objective, PPG) %>%
+  ) %>%
+  rename("office.type" = "Type")
+rm(operations)
+
+# Create dummies for whether or not country has allocated any budget
+budget_data <- budget_data %>%
+  mutate(budget_allocated = ifelse(is.na(Total_OL), 0, 1)) %>%
+  mutate(budget_allocated = ifelse(!is.na(Total_OL) & Total_OL == 0, 0, budget_allocated)) 
+
+# We get impact-level data by aggregating budget data beyond output data  
+budget_impact <- budget_data %>%
+  group_by(Country, Year, Objective, PPG) %>%
   dplyr::summarise(
     Admin_OL = sum(Admin_OL, na.rm = TRUE),
     Staff_OL = sum(Staff_OL, na.rm = TRUE),
@@ -197,131 +213,134 @@ budget_impact <- budget %>%
     Internal_project_Exp = sum(Internal_project_Exp, na.rm = TRUE),
     External_project_Exp = sum(External_project_Exp, na.rm = TRUE),
     Total_Exp = sum(Total_Exp, na.rm = TRUE),
-    selected_budget = max(selected_budget, na.rm = TRUE)
-  )
+    budget_allocated = max(budget_allocated, na.rm = TRUE)
+  ) %>%
+  as.data.frame()
+budget_data2 <- budget_data[, c("Region", "Sub region", "Regional bureau", "Country", "office.type")] %>% 
+  distinct(Country, .keep_all = TRUE)
+budget_impact <- merge(budget_data2, budget_impact, by  = "Country", all.y = TRUE)
+rm(budget_data2)
 
 
 
-# 7) prepare the staffing [DHR] data --------------------------- --------------------------- ---------------------------
+# Clean up  staffing data --------------------------- --------------------------- ---------------------------
 
-categories <- unique(staffing$Categories)
-contracts <- unique(staffing$Contract)
-staffing$Gender <- ifelse(staffing$Gender == "F", "1", "0")
-staffing$Gender <- as.numeric(staffing$Gender)
-colnames(staffing)[colnames(staffing) == "Gender"] <- "Female"
+staffing_data <- staffing_data %>%
+  rename("Objective" = Unit) %>%
+  mutate(Objective == ifelse(Objective == "GBV", "Risk of SGBV is reduced and quality of response improved", Objective)) %>%
+  mutate(Objective == ifelse(Objective == "CBP", "Community mobilization strengthened and expanded", Objective)) 
 
-staffingT <- staffing %>%
-  group_by(Operation, Year, Unit) %>%
-  dplyr::summarise(Total = n())
+# Create summary stats on how many staff members per unit
+staffing_data_total <- staffing_data %>%
+  group_by(Operation, Year, Objective) %>%
+  dplyr::summarise(`Total_staff` = n())
 
-for (elem in categories) {
-  NEW <- staffing[staffing$Categories == elem, ] %>%
-    group_by(Operation, Year, Unit) %>%
-    dplyr::summarise(Count = n())
-  colnames(NEW)[colnames(NEW) == "Count"] <- elem
-  assign(paste0("staffing", elem), NEW)
-}
+staffing_data_categories <- staffing_data %>%
+  group_by(Operation, Year, Objective, Categories) %>%
+  dplyr::summarise(Category = n()) %>%
+  as.data.frame()
 
-for (elem in contracts) {
-  NEW <- staffing[staffing$Contract == elem, ] %>%
-    group_by(Operation, Year, Unit) %>%
-    dplyr::summarise(Count = n())
-  colnames(NEW)[colnames(NEW) == "Count"] <- elem
-  assign(paste0("staffing", elem), NEW)
-}
-rm(categories, contracts, elem, NEW)
+staffing_data_categories  <- reshape(staffing_data_categories,
+                                     idvar = c("Operation", "Objective", "Year"),
+                                     timevar = "Categories",
+                                     v.names = "Category", 
+                                     direction = "wide")
+  
+staffing_data_contract <- staffing_data %>%
+  group_by(Operation, Year, Objective, Contract) %>%
+  rename("Contract2" = Contract) %>%
+  dplyr::summarise(Contract = n()) %>%
+  as.data.frame()
 
-staffingFemale <- staffing %>%
-  group_by(Operation, Year, Unit) %>%
-  dplyr::summarise(Female = sum(Female, na.rm = TRUE))
+staffing_data_contract  <- reshape(staffing_data_contract,
+                                  idvar = c("Operation", "Objective", "Year"),
+                                  timevar = "Contract2",
+                                  v.names = "Contract", 
+                                  direction = "wide")
 
-staffingCount <- merge(staffingT, staffingAWF, by = c("Operation", "Unit", "Year"), all = TRUE)
-staffingCount <- merge(staffingCount, staffingG, by = c("Operation", "Unit", "Year"), all = TRUE)
-staffingCount <- merge(staffingCount, staffingJPO, by = c("Operation", "Unit", "Year"), all = TRUE)
-staffingCount <- merge(staffingCount, staffingN, by = c("Operation", "Unit", "Year"), all = TRUE)
-staffingCount <- merge(staffingCount, staffingP, by = c("Operation", "Unit", "Year"), all = TRUE)
-colnames(staffingAWF)[colnames(staffingAWF) == "AWF"] <- "AWF_contract"
-staffingCount <- merge(staffingCount, staffingAFF, by = c("Operation", "Unit", "Year"), all = TRUE)
-staffingCount <- merge(staffingCount, staffingFTA, by = c("Operation", "Unit", "Year"), all = TRUE)
-staffingCount <- merge(staffingCount, staffingIND, by = c("Operation", "Unit", "Year"), all = TRUE)
-staffingCount <- merge(staffingCount, staffingTA, by = c("Operation", "Unit", "Year"), all = TRUE)
-staffingCount <- merge(staffingCount, staffingFemale, by = c("Operation", "Unit", "Year"), all = TRUE)
+staffing_data_female <- staffing_data %>%
+  mutate(Gender = ifelse(Gender == "F", 1, 0)) %>%
+  group_by(Operation, Year, Objective) %>%
+  dplyr::summarise(Female = sum(Gender, na.rm = TRUE))
 
-staffingCount <- staffingCount %>%
-  arrange(Operation, Unit, Year)
+staffing_data <- list(staffing_data_categories, staffing_data_contract, staffing_data_female, staffing_data_total)
+staffing_data <- staffing_data %>% 
+  reduce(full_join, by = c("Operation", "Year", "Objective")) %>%
+    mutate(across(starts_with("C"), ~ case_when(is.na(.)  ~ 0,
+                                                .default = as.numeric(.)))) %>%
+  mutate(staff_allocated = ifelse(Total_staff > 0 , 1, 0)) %>%
+  rename("Country" = Operation)
 
-staffingCount$Total[is.na(staffingCount$Total)] <- 0
-staffingCount$AWF[is.na(staffingCount$AWF)] <- 0
-staffingCount$G[is.na(staffingCount$G)] <- 0
-staffingCount$JPO[is.na(staffingCount$JPO)] <- 0
-staffingCount$N[is.na(staffingCount$N)] <- 0
-staffingCount$P[is.na(staffingCount$P)] <- 0
-staffingCount$AFF[is.na(staffingCount$AFF)] <- 0
-staffingCount$FTA[is.na(staffingCount$FTA)] <- 0
-staffingCount$IND[is.na(staffingCount$IND)] <- 0
-staffingCount$TA[is.na(staffingCount$TA)] <- 0
-rm(
-  staffingAWF,
-  staffingG, staffingJPO, staffingN, staffingP,
-  staffingAFF, staffingFTA, staffingIND, staffingTA,
-  staffingT, staffingFemale,
-  staffing
-)
-
-colnames(staffingCount)[colnames(staffingCount) == "Unit"] <- "Objective"
-colnames(staffingCount)[colnames(staffingCount) == "Total"] <- "Total_staff"
-staffingCount$Objective[staffingCount$Objective == "GBV"] <- "Risk of SGBV is reduced and quality of response improved"
-staffingCount$Objective[staffingCount$Objective == "CBP"] <- "Community mobilization strengthened and expanded"
-staffingCount$selected_staffing <- 1
+rm(staffing_data_categories, staffing_data_contract, staffing_data_female, staffing_data_total, staffing_OL)
 
 
 
-# 8) prepare the RBM data --------------------------- --------------------------- ---------------------------
+# Clean up RBM data --------------------------- --------------------------- ---------------------------
+# RBM stands for results-based measurement
 
-indicators <- indicators %>%
-  select(
-    Operation, Year, PPG,
-    Objective, Output,
-    Type, Indicator,
-    Baseline, Mid_Year, Year_End, OL_Target, OP_Target
-  )
-indicators <- indicators %>%
-  mutate(selected_indicators = ifelse(!is.na(OL_Target), 1, 0))
-indicators$selected_indicators <- 1
-indicators_performance <- indicators %>%
-  filter(Type == "Performance")
-indicators_impact <- indicators %>%
-  filter(Type == "Impact")
-indicators <- merge(indicators, indicator_overview, by = "Indicator", all.x = TRUE)
+# Incorporate indicator meta-data, including forms of aggregation. There are 3 types of indicators:
+# 1) indicators that are aggregated through averaging across sub-units 
+# 2) indicators that are aggregated through choosing the maximum value 
+# 3) indicators that are aggregated through summing up sub-units
+
+rbm_data <- merge(rbm_data, indicator_overview, by = c("Objective", "Type", "Output", "Indicator"), all.x = TRUE)
+rm(indicator_overview)
+rbm_data <- rbm_data %>%
+  select(Objective, Type, Output, Output.code, Indicator, indicator.code, Aggregation,
+         Operation, Year, PPG, 
+         Baseline, Mid_Year, Year_End, OL_Target, OP_Target) %>%
+  mutate(indicators_chosen = ifelse(!is.na(OL_Target), 1, 0)) %>%
+  rename("indicator.type" = Type,
+         "Country" = Operation)
+
+# create dummy whether or not indicator targets habe neen reached; ie the dependent variable in the logistic regression analysis 
+rbm_data <- rbm_data %>%
+  mutate(targetsreached = ifelse(((Year_End - OL_Target) < 0) &  Indicator != "# of reported incidents of SGBV", 0, 1)) %>%
+  mutate(targetsreached = ifelse(Indicator == "# of reported incidents of SGBV", 0, targetsreached)) %>%
+  mutate(targetsreached = ifelse(((Year_End - OL_Target) <= 0) &  Indicator == "# of reported incidents of SGBV", 1, targetsreached)) %>%
+  mutate(targetsreached = ifelse(((Year_End - OL_Target) > 0) &  Indicator == "# of reported incidents of SGBV", 0, targetsreached))
+
+# Divide RBM data into impact and performance data 
+rbm_data_performance <- rbm_data %>%
+  filter(indicator.type == "Performance")
+rbm_data_impact <- rbm_data %>%
+  filter(indicator.type == "Impact")
 
 
 
-# 9) merge data --------------------------- --------------------------- ---------------------------
+# Merge data to create combined legacy data --------------------------- --------------------------- ---------------------------
+# The combined data will be divided into impact-related and performance-related data
 
-legacy_performance <- merge(budget, indicators_performance, by = c("Year", "Operation", "Objective", "Output", "PPG"), all = TRUE)
-legacy_impact <- merge(budget_impact, indicators_impact, by = c("Year", "Operation", "Objective", "PPG"), all = TRUE)
-legacy_impact$Region <- ""
-legacy_impact$Sub_region <- ""
+legacy_performance <- list(budget_data, rbm_data_performance)
+legacy_performance <- legacy_performance %>% 
+  reduce(full_join, by = c("Year", "Country", "Objective", "Output", "PPG"))
 
-table(legacy$PPG, useNA = "always")
-write.csv(legacy, "legacy.csv")
-write.csv(staffingCount, "staffingCount.csv")
-write.csv(legacy, "legacy2.csv")
+legacy_impact <- list(budget_impact, rbm_data_impact)
+legacy_impact <- legacy_impact %>% 
+  reduce(full_join, by = c("Year", "Country", "Objective", "PPG")) %>%
+  mutate(Output = "")
+rm(budget_impact, rbm_data_impact, rbm_data_performance)
 
 legacy <- rbind(legacy_performance, legacy_impact)
-legacy <- merge(legacy, staffingCount, by = c("Operation", "Objective", "Year"), all = TRUE)
+rm(legacy_performance, legacy_impact)
+legacy <- merge(legacy, staffing_data, by = c("Country", "Objective", "Year"), all = TRUE)
+
+
+
+# Clean up legacy data --------------------------- --------------------------- ---------------------------
+
 legacy <- legacy %>%
   mutate(
     Total_staff = ifelse(is.na(Total_staff), 0, Total_staff),
-    AWF = ifelse(is.na(AWF), 0, AWF),
-    G = ifelse(is.na(G), 0, G),
-    JPO = ifelse(is.na(JPO), 0, JPO),
-    N = ifelse(is.na(N), 0, N),
-    P = ifelse(is.na(P), 0, P),
-    AFF = ifelse(is.na(AFF), 0, AFF),
-    FTA = ifelse(is.na(FTA), 0, FTA),
-    IND = ifelse(is.na(IND), 0, IND),
-    TA = ifelse(is.na(TA), 0, TA),
+    Category.AWF = ifelse(is.na(Category.AWF), 0, Category.AWF),
+    Category.G = ifelse(is.na(Category.G), 0, Category.G),
+    Category.JPO = ifelse(is.na(Category.JPO), 0, Category.JPO),
+    Category.N = ifelse(is.na(Category.N), 0, Category.N),
+    Category.P = ifelse(is.na(Category.P), 0, Category.P),
+    Contract.AFF = ifelse(is.na(Contract.AFF), 0, Contract.AFF),
+    Contract.FTA = ifelse(is.na(Contract.FTA), 0, Contract.FTA),
+    Contract.IND = ifelse(is.na(Contract.IND), 0, Contract.IND),
+    Contract.TA = ifelse(is.na(Contract.TA), 0, Contract.TA),
     Admin_OL = ifelse(is.na(Admin_OL), 0, Admin_OL),
     Staff_OL = ifelse(is.na(Staff_OL), 0, Staff_OL),
     Internal_project_OL = ifelse(is.na(Internal_project_OL), 0, Internal_project_OL),
@@ -343,27 +362,13 @@ legacy <- legacy %>%
     External_project_Exp = ifelse(is.na(External_project_Exp), 0, External_project_Exp),
     Total_Exp = ifelse(is.na(Total_Exp), 0, Total_Exp)
   )
+
 legacy <- legacy %>%
   mutate(
-    selected_budget = ifelse(is.na(selected_budget), 0, selected_budget),
-    selected_staffing = ifelse(is.na(selected_staffing), 0, selected_staffing),
-    selected_indicators = ifelse(is.na(selected_indicators), 0, selected_indicators)
+    budget_allocated = ifelse(is.na(budget_allocated), 0, budget_allocated),
+    staff_allocated = ifelse(is.na(staff_allocated), 0, staff_allocated),
+    indicators_chosen = ifelse(is.na(indicators_chosen), 0, indicators_chosen)
   )
-legacy <- legacy %>%
-  select(
-    selected_budget, selected_staffing, selected_indicators,
-    Operation, Objective, Output, Year,
-    PPG,
-    Admin_OL, Staff_OL, Internal_project_OL, External_project_OL, Total_OL,
-    Admin_AOL, Staff_AOL, Internal_project_AOL, External_project_AOL, Total_AOL,
-    Admin_OP, Staff_OP, Internal_project_OP, External_project_OP, Total_OP,
-    Admin_Exp, Staff_Exp, Internal_project_Exp, External_project_Exp, Total_Exp,
-    Total_staff, Female, AWF, G, JPO, N, P,
-    AFF, FTA, IND, TA,
-    Type, Indicator,
-    Baseline, Mid_Year, Year_End, OL_Target, OP_Target
-  ) %>%
-  mutate(Output = ifelse((is.na(Output) & !is.na(Type)), "Impact", Output))
 
 legacy <- legacy %>%
   mutate(
@@ -374,27 +379,183 @@ legacy <- legacy %>%
     OP_Target = ifelse(is.infinite(OP_Target), NA, OP_Target)
   )
 
-legacy <- merge(legacy, operations2, by.x = "Operation", by.y = "Alternative spelling", all.x = TRUE)
+# Create numeric country codes 
+country_codes <- as.data.frame(matrix( nrow = length(unique(legacy$Country)),ncol = 2))
+colnames(country_codes) <- c("Country", "Country.code")
+country_codes$Country <- unique(legacy$Country)
+country_codes$Country.code <- 1:length(unique(legacy$Country))
+legacy <- merge(legacy, country_codes, by = "Country")
 
 legacy <- legacy %>%
   select(
-    selected_budget, selected_staffing, selected_indicators,
-    `Regional bureau`, Country,
-    Objective, Output, Year, PPG,
+    budget_allocated, staff_allocated, indicators_chosen,
+    `Regional bureau`, Region, `Sub region`, Country, Country.code, office.type,
+    Objective, Output, Output.code, Year, PPG,
     Admin_OL, Staff_OL, Internal_project_OL, External_project_OL, Total_OL,
     Admin_AOL, Staff_AOL, Internal_project_AOL, External_project_AOL, Total_AOL,
     Admin_OP, Staff_OP, Internal_project_OP, External_project_OP, Total_OP,
     Admin_Exp, Staff_Exp, Internal_project_Exp, External_project_Exp, Total_Exp,
-    Total_staff, Female, AWF, G, JPO, N, P,
-    AFF, FTA, IND, TA,
-    Type, Indicator, Baseline, Mid_Year, Year_End, OL_Target, OP_Target
-  ) %>%
-  filter(!is.na(Country))
+    Total_staff, Female, Category.AWF, Category.G, Category.JPO, Category.N, Category.P,
+    Contract.AFF, Contract.FTA, Contract.IND, Contract.TA,
+    indicator.type, Indicator, indicator.code, Aggregation, Baseline, Mid_Year, Year_End, OL_Target, OP_Target, 
+    targetsreached) %>%
+  filter(!is.na(Country)) %>%
+  mutate(Output = ifelse((is.na(Output) & !is.na(indicator.type)), "Impact", Output))
+
+# We only need the subset of legacy data with valid data on 'targetreached'
+legacy <- legacy %>%
+  filter(!is.na(targetsreached))
 
 
 
-# 10) save data --------------------------- --------------------------- ---------------------------
+# Add dummy variables for the logistics regression models --------------------------- --------------------------- ---------------------------
 
-write.csv(staffingCount, "06 Data/01 Legacy Analysis/UNHCR_legacy_staffCount_clean_20230708.csv", row.names = FALSE)
-write.csv(budget, "06 Data/01 Legacy Analysis/UNHCR_legacy_budget_clean_20230708.csv", row.names = FALSE)
-write.csv(legacy, "06 Data/01 Legacy Analysis/UNHCR_legacy_clean_combined_20230708.csv", row.names = FALSE)
+legacy <- legacy %>%
+  mutate(Americas = factor(ifelse(`Regional bureau` == "Americas" , 0.5, -0.5)),
+         Asia = factor(ifelse(`Regional bureau` == "Asia and the Pacific" , 0.5, -0.5)),
+         EHAGL = factor(ifelse(`Regional bureau` == "East and Horn of Africa and Great Lakes" , 0.5, -0.5)),
+         Europe = factor(ifelse(`Regional bureau` == "Europe" , 0.5, -0.5)),
+         MENA = factor(ifelse(`Regional bureau` == "Middle East and North Africa" , 0.5, -0.5)),
+         NAmerica = factor(ifelse(`Regional bureau` == "Northern America" , 0.5, -0.5)),
+         SAfrica = factor(ifelse(`Regional bureau` == "Southern Africa" , 0.5, -0.5)),
+         WCA = factor(ifelse(`Regional bureau` == "West and Central Africa" , 0.5, -0.5)),
+         Year2 = Year - 2015,
+         Year2sq = (Year - 2015)^2,
+         impact00 = factor(ifelse(indicator.type == "Impact" & indicator.code == 0, 0.5, -0.5)),
+         impact01 = factor(ifelse(indicator.type == "Impact" & indicator.code == 1, 0.5, -0.5)),
+         impact02 = factor(ifelse(indicator.type == "Impact" & indicator.code == 2, 0.5, -0.5)),
+         impact03 = factor(ifelse(indicator.type == "Impact" & indicator.code == 3, 0.5, -0.5)),
+         impact03 = factor(ifelse(indicator.type == "Impact" & indicator.code == 3, 0.5, -0.5)),
+         output00 = factor(ifelse(Output.code == 0, 0.5, -0.5)),
+         output01 = factor(ifelse(Output.code == 1, 0.5, -0.5)),
+         output02 = factor(ifelse(Output.code == 2, 0.5, -0.5)),
+         output03 = factor(ifelse(Output.code == 3, 0.5, -0.5)),
+         output04 = factor(ifelse(Output.code == 4, 0.5, -0.5)),
+         output05 = factor(ifelse(Output.code == 5, 0.5, -0.5)),
+         output06 = factor(ifelse(Output.code == 6, 0.5, -0.5)),
+         output07 = factor(ifelse(Output.code == 7, 0.5, -0.5)),
+         output08 = factor(ifelse(Output.code == 8, 0.5, -0.5)),
+         performance01 = factor(ifelse(indicator.type == "Performance" & indicator.code == 1, 0.5, -0.5)),
+         performance02 = factor(ifelse(indicator.type == "Performance" & indicator.code == 2, 0.5, -0.5)),
+         performance03 = factor(ifelse(indicator.type == "Performance" & indicator.code == 3, 0.5, -0.5)),
+         performance04 = factor(ifelse(indicator.type == "Performance" & indicator.code == 4, 0.5, -0.5)),
+         performance05 = factor(ifelse(indicator.type == "Performance" & indicator.code == 5, 0.5, -0.5)),
+         performance06 = factor(ifelse(indicator.type == "Performance" & indicator.code == 6, 0.5, -0.5)),
+         performance07 = factor(ifelse(indicator.type == "Performance" & indicator.code == 7, 0.5, -0.5)),
+         performance08 = factor(ifelse(indicator.type == "Performance" & indicator.code == 8, 0.5, -0.5)),
+         performance09 = factor(ifelse(indicator.type == "Performance" & indicator.code == 9, 0.5, -0.5)),
+         performance10 = factor(ifelse(indicator.type == "Performance" & indicator.code == 10, 0.5, -0.5)),
+         performance11 = factor(ifelse(indicator.type == "Performance" & indicator.code == 11, 0.5, -0.5)),
+         performance12 = factor(ifelse(indicator.type == "Performance" & indicator.code == 12, 0.5, -0.5)),
+         performance13 = factor(ifelse(indicator.type == "Performance" & indicator.code == 13, 0.5, -0.5)),
+         performance14 = factor(ifelse(indicator.type == "Performance" & indicator.code == 14, 0.5, -0.5)),
+         performance15 = factor(ifelse(indicator.type == "Performance" & indicator.code == 15, 0.5, -0.5)),
+         performance16 = factor(ifelse(indicator.type == "Performance" & indicator.code == 16, 0.5, -0.5)),
+         performance17 = factor(ifelse(indicator.type == "Performance" & indicator.code == 17, 0.5, -0.5)),
+         PPG1 = factor(ifelse(PPG == 1, 0.5, -0.5)),
+         PPG2 = factor(ifelse(PPG == 2, 0.5, -0.5)),
+         PPG3 = factor(ifelse(PPG == 3, 0.5, -0.5)),
+         PPG4 = factor(ifelse(PPG == 4, 0.5, -0.5)),
+         PPG5 = factor(ifelse(PPG == 5, 0.5, -0.5)),
+         Type.CO = ifelse(office.type == "Country office", 1, 0),
+         Type.LO = ifelse(office.type == "Liaison office", 1, 0),
+         Type.MCO = ifelse(office.type == "Multi-country office", 1, 0),
+         Type.NO = ifelse(office.type == "National office", 1, 0),
+         Type.Oocm = ifelse(office.type == "Office of chief of mission", 1, 0),
+         Type.P = ifelse(office.type == "Presence", 1, 0))
+
+
+
+# Create GBV-specific subsets --------------------------- --------------------------- ---------------------------
+# It is assumed that data is hierarchical (i.e., performance within country) 
+# A multilevel logistic  regression model is therefore necessary
+
+legacy_GBV <- legacy %>%
+  filter(Objective == "Risk of SGBV is reduced and quality of response improved")
+
+# First, we create an impact-specific data set
+legacy_impact_GBV <- legacy_GBV %>%
+  filter(indicator.type == "Impact")
+
+# It is necessary to remove those countries that have less than three data points 
+country_impact <- legacy_impact_GBV %>%
+  group_by(Country) %>%
+  dplyr::summarise(Count = n()) %>%
+  mutate(delete = ifelse(Count < 3, 1,0))
+
+legacy_impact_GBV <- merge(legacy_impact_GBV, country_impact, by = "Country") %>%
+  filter(delete == 0)
+
+# Second, we create a performance-specific data set
+legacy_performance_GBV <- legacy_GBV %>%
+  filter(indicator.type == "Performance")
+
+# It is necessary to remove those countries that have less than three data points 
+country_performance <- legacy_performance_GBV %>%
+  group_by(Country) %>%
+  dplyr::summarise(Count = n()) %>%
+  mutate(delete = ifelse(Count < 3, 1,0))
+
+legacy_performance_GBV <- merge(legacy_performance_GBV, country_performance, by = "Country") %>%
+  filter(delete == 0)
+
+# we also remove those impact indicators that have less than 30 data points
+table(legacy_performance_GBV$indicator.code, useNA = "always")
+which(table(legacy_performance_GBV$indicator.code) < 30)
+legacy_performance_GBV <- legacy_performance_GBV %>%
+  filter(indicator.code !=   4) %>%
+  filter(indicator.code !=   5) %>%
+  filter(indicator.code !=  11) %>%
+  filter(indicator.code !=  14)
+
+
+
+# Create CBP-specific subsets --------------------------- --------------------------- ---------------------------
+# It is assumed that data is hierarchical (i.e., performance within country) 
+# A multilevel logistic  regression model is therefore necessary
+
+legacy_CBP <- legacy %>%
+  filter(Objective == "Community mobilization strengthened and expanded")
+length(unique(legacy_CBP$Country))
+
+# First, we create an impact-specific data set
+legacy_impact_CBP <- legacy_CBP %>%
+  filter(indicator.type == "Impact")
+
+# It is necessary to remove those countries that have less than three data points 
+country_impact <- legacy_impact_CBP %>%
+  group_by(Country) %>%
+  dplyr::summarise(Count = n()) %>%
+  mutate(delete = ifelse(Count < 3, 1,0))
+
+legacy_impact_CBP <- merge(legacy_impact_CBP, country_impact, by = "Country") %>%
+  filter(delete == 0)
+
+# we also remove those impact indicators that have less than 30 data points
+table(legacy_impact_CBP$indicator.code, useNA = "always")
+which(table(legacy_impact_CBP$indicator.code) < 30)
+legacy_impact_CBP <- legacy_impact_CBP %>%
+  filter(indicator.code !=   2)
+
+# Second, we create a performance-specific data set
+legacy_performance_CBP <- legacy_CBP %>%
+  filter(indicator.type == "Performance")
+
+country_performance <- legacy_performance_CBP %>%
+  group_by(Country) %>%
+  dplyr::summarise(Count = n()) %>%
+  mutate(delete = ifelse(Count < 3, 1,0))
+legacy_performance_CBP <- merge(legacy_performance_CBP, country_performance, by = "Country") %>%
+  filter(delete == 0)
+
+# we also remove those impact indicators that have less than 30 data points
+table(legacy_performance_CBP$indicator.code, useNA = "always")
+which(table(legacy_performance_CBP$indicator.code) < 30)
+
+
+
+# Save data --------------------------- --------------------------- ---------------------------
+
+write.csv(legacy, "02 processed data/legacy_clean_combined_20230708.csv", row.names = FALSE)
+write.csv(legacy, "02 processed data/legacy_clean_combined_CBP_20230708.csv", row.names = FALSE)
+write.csv(legacy, "02 processed data/legacy_clean_combined_GBV_20230708.csv", row.names = FALSE)
