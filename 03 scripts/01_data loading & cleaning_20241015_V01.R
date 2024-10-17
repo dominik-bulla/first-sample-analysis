@@ -1,9 +1,13 @@
 # Description --------------------------- --------------------------- ---------------------------
 # Project: Analysis of CBP/ APP legacy data (i.e., 2015-2021)
 # Author: Dominik Bulla (dominik.bulla@gmail.com)
-# Date: 2024-10-14
-# Purpose: Clean and prepare dataset for analysis.
-
+# Date: 2023-07-23
+# Background: The client was interested to explore the relations between achievement of programmatic targets (i.e., yes/ no) and 
+# top-level factors associated with operations across the world. To answer the question, a multilevel-regression analysis 
+# was performed. Impact targets refer to two units (i.e., GBV as well as CBP) within the organization. There are also two types 
+# of targets, i.e., impact as well as performance (output) targets. The example analysis below is only about GBV impact targets. 
+# The other three analyses are not presented here.    
+# Purpose: Clean up and make the data set ready for multilevel logistic analysis
 
 
 # Environment --------------------------- --------------------------- ---------------------------
@@ -284,6 +288,8 @@ rm(operations, staffing_data_categories, staffing_data_contract, staffing_data_f
 # 2) indicators that are aggregated through choosing the maximum value 
 # 3) indicators that are aggregated through summing up sub-units
 
+
+
 rbm_data <- merge(rbm_data, indicator_overview, by = c("Objective", "Type", "Output", "Indicator"), all.x = TRUE)
 rm(indicator_overview)
 rbm_data <- rbm_data %>%
@@ -301,7 +307,7 @@ rbm_data <- rbm_data %>%
   mutate(prop_change = ifelse(is.infinite(prop_change), NA, prop_change)) %>%
   mutate(prop_change = ifelse((Indicator == "# of reported incidents of SGBV" & prop_change < 0), prop_change *-1, prop_change))
 
-# create dummy whether or not indicator targets habe neen reached; ie the dependent variable in the logistic regression analysis 
+# create dummy whether or not indicator targets have been reached; i.e., the dependent variable in the logistic regression analysis 
 rbm_data <- rbm_data %>%
   mutate(targetsreached = ifelse(((Year_End - OL_Target) < 0) &  Indicator != "# of reported incidents of SGBV", 0, 1)) %>%
   mutate(targetsreached = ifelse(Indicator == "# of reported incidents of SGBV", 0, targetsreached)) %>%
@@ -393,6 +399,7 @@ colnames(country_codes) <- c("Country", "Country.code")
 country_codes$Country <- unique(legacy$Country)
 country_codes$Country.code <- 1:length(unique(legacy$Country))
 legacy <- merge(legacy, country_codes, by = "Country")
+rm(country_codes)
 
 legacy <- legacy %>%
   select(
@@ -409,10 +416,6 @@ legacy <- legacy %>%
     OL_Target, OP_Target, prop_change, targetsreached) %>%
   filter(!is.na(Country)) %>%
   mutate(Output = ifelse((is.na(Output) & !is.na(indicator.type)), "Impact", Output))
-
-# We only need the subset of legacy data with valid data on 'targetsreached'
-legacy <- legacy %>%
-  filter(!is.na(targetsreached))
 
 
 
@@ -540,6 +543,8 @@ legacy_impact_CBP <- merge(legacy_impact_CBP, country_impact, by = "Country") %>
   filter(delete == 0) %>%
   select(-c(Count, delete))
 
+
+
 # we also remove those impact indicators that have less than 30 data points
 table(legacy_impact_CBP$indicator.code, useNA = "always")
 which(table(legacy_impact_CBP$indicator.code) < 30)
@@ -562,6 +567,7 @@ legacy_performance_CBP <- merge(legacy_performance_CBP, country_performance, by 
 table(legacy_performance_CBP$indicator.code, useNA = "always")
 which(table(legacy_performance_CBP$indicator.code) < 30)
 
+rm(country_impact, country_performance)
 
 # Cluster-mean centering --------------------------- --------------------------- ---------------------------
 # we apply grand mean centering
@@ -592,11 +598,16 @@ for (elem in 2 : ncol(cm)) {
   colnames(legacy_impact_GBV)[colnames(legacy_impact_GBV) == gsub("_cm", "", colnames(cm)[elem])] <- "var2"
   legacy_impact_GBV <- legacy_impact_GBV %>%
     mutate(var = var2 - var) %>%
+    mutate(var = ifelse(is.na(var), 0, var))
+  legacy_impact_GBV <- legacy_impact_GBV %>%
+    group_by(Country) %>%
     mutate(var = scale(var)) %>%
     mutate(var = ifelse(is.na(var), 0, var))
   colnames(legacy_impact_GBV)[colnames(legacy_impact_GBV) == "var"] <- colnames(cm)[elem]
   colnames(legacy_impact_GBV)[colnames(legacy_impact_GBV) == "var2"] <- gsub("_cm", "", colnames(cm)[elem])
 }
+
+
 
 cm <- legacy_performance_GBV %>%
   group_by(Country) %>%
@@ -623,6 +634,9 @@ for (elem in 2 : ncol(cm)) {
   colnames(legacy_performance_GBV)[colnames(legacy_performance_GBV) == gsub("_cm", "", colnames(cm)[elem])] <- "var2"
   legacy_performance_GBV <- legacy_performance_GBV %>%
     mutate(var = var2 - var) %>%
+    mutate(var = ifelse(is.na(var), 0, var))
+  legacy_performance_GBV <- legacy_performance_GBV %>%
+    group_by(Country) %>%
     mutate(var = scale(var)) %>%
     mutate(var = ifelse(is.na(var), 0, var))
   colnames(legacy_performance_GBV)[colnames(legacy_performance_GBV) == "var"] <- colnames(cm)[elem]
@@ -657,11 +671,16 @@ for (elem in 2 : ncol(cm)) {
   colnames(legacy_impact_CBP)[colnames(legacy_impact_CBP) == gsub("_cm", "", colnames(cm)[elem])] <- "var2"
   legacy_impact_CBP <- legacy_impact_CBP %>%
     mutate(var = var2 - var) %>%
+    mutate(var = ifelse(is.na(var), 0, var))
+  legacy_impact_CBP <- legacy_impact_CBP %>%
+    group_by(Country) %>%
     mutate(var = scale(var)) %>%
     mutate(var = ifelse(is.na(var), 0, var))
   colnames(legacy_impact_CBP)[colnames(legacy_impact_CBP) == "var"] <- colnames(cm)[elem]
   colnames(legacy_impact_CBP)[colnames(legacy_impact_CBP) == "var2"] <- gsub("_cm", "", colnames(cm)[elem])
 }
+
+
 
 cm <- legacy_performance_CBP %>%
   group_by(Country) %>%
@@ -688,16 +707,21 @@ for (elem in 2 : ncol(cm)) {
   colnames(legacy_performance_CBP)[colnames(legacy_performance_CBP) == gsub("_cm", "", colnames(cm)[elem])] <- "var2"
   legacy_performance_CBP <- legacy_performance_CBP %>%
     mutate(var = var2 - var) %>%
+    mutate(var = ifelse(is.na(var), 0, var))
+  legacy_performance_CBP <- legacy_performance_CBP %>%
+    group_by(Country) %>%
     mutate(var = scale(var)) %>%
     mutate(var = ifelse(is.na(var), 0, var))
   colnames(legacy_performance_CBP)[colnames(legacy_performance_CBP) == "var"] <- colnames(cm)[elem]
   colnames(legacy_performance_CBP)[colnames(legacy_performance_CBP) == "var2"] <- gsub("_cm", "", colnames(cm)[elem])
 }
+rm(cm, elem)
 
 
 
 # Save data --------------------------- --------------------------- ---------------------------
 
+# All data sets are saved even though only the GBV impact data set is required.
 write.csv(legacy, "02 processed data/legacy_20230708.csv", row.names = FALSE)
 write.csv(legacy_performance_CBP, "02 processed data/legacy_CBP_performance_20230708.csv", row.names = FALSE)
 write.csv(legacy_performance_GBV, "02 processed data/legacy_GBV_performance_20230708.csv", row.names = FALSE)
