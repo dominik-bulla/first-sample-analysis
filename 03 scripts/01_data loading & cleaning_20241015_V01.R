@@ -37,7 +37,6 @@ indicator_overview <- read_excel("01 raw data/legacy_Indicator overview_20230628
 
 
 # Clean up budget data --------------------------- --------------------------- ---------------------------
-
 # reduce budget data down to variables actually needed for analysis  
 budget_data <- budget_data %>%
   select(Operation, Year, PPG, Objective, Output_Name, Budget_Component, Budget_Category, Cost_USD) %>%
@@ -126,7 +125,6 @@ budget_data <- budget_data %>%
 
 
 # Clean up expenditure data --------------------------- --------------------------- ---------------------------
-
 # reduce expenditure data down to variables actually needed for analysis  
 expenditure_data <- expenditure_data %>%
   select(Operation, Year, PPG, Objective, Output, Budget_Category, Expenditures) %>%
