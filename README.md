@@ -16,4 +16,6 @@ The entire project consists of the following folders:
 
 The entire project is managed in RStudio. To review and edit the project, open the Rproj-file 'first-sample-analysis', which is located at the top-level of the repository. It opens up the two R-scripts, which are placed in the folder '03 scripts'.
 
+Also see 'https://github.com/dominik-bulla/first-sample-analysis'
+
  
